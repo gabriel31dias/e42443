@@ -1,63 +1,57 @@
-import { useState } from 'react';
-import { useQuery } from 'react-query';
-import axios from 'axios';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from 'react-query';
 import ProductCard from './ProductCard';
-
-type Product = {
-  id: number;
-  title: string;
-  description: string;
-  price: number;
-  image: string;
-};
-
-const fetchProducts = async (): Promise<Product[]> => {
-  const { data } = await axios.get('https://fakestoreapi.com/products');
-  return data;
-};
+import { Product } from '../types';
+import { fetchProducts } from '../services/productService';
+import { fetchFavorites, addFavorite, removeFavorite } from '../services/favoriteService';
 
 const ProductList = () => {
   const [favorites, setFavorites] = useState<Product[]>([]);
-  const { data, isLoading, error } = useQuery<Product[]>(
-    'products',
-    fetchProducts,
-  );
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useQuery<Product[]>('products', fetchProducts);
 
-  const toggleFavorite = (product: Product) => {
-    setFavorites((prevFavorites) =>
-      prevFavorites.includes(product)
-        ? prevFavorites.filter((fav) => fav.id !== product.id)
-        : [...prevFavorites, product],
-    );
+  useEffect(() => {
+    const loadFavorites = async () => {
+      const favoriteProducts = await fetchFavorites();
+      setFavorites(favoriteProducts);
+    };
+    loadFavorites();
+  }, []);
+
+  const toggleFavorite = async (product: Product) => {
+    const isFavorited = favorites.some((fav) => fav.id === product.id);
+
+    if (isFavorited) {
+      const success = await removeFavorite(product.id);
+      if (success) {
+        setFavorites((prevFavorites) =>
+          prevFavorites.filter((fav) => fav.id !== product.id)
+        );
+      }
+    } else {
+      const success = await addFavorite(product);
+      if (success) {
+        setFavorites((prevFavorites) => [...prevFavorites, product]);
+      }
+    }
+
+    const updatedFavorites = await fetchFavorites();
+    setFavorites(updatedFavorites);
   };
 
-  if (isLoading) return <p>Loading...</p>;
-  if (error) return <p>Error loading products</p>;
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error loading products</div>;
 
   return (
-    <div>
-      <h2 className="mb-4">Favorites</h2>
-      <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-        {favorites.map((product) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            isFavorite={true}
-            onToggleFavorite={toggleFavorite}
-          />
-        ))}
-      </div>
-      <h2 className="mt-4 mb-4">All Products</h2>
-      <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-        {data?.map((product) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            isFavorite={favorites.includes(product)}
-            onToggleFavorite={toggleFavorite}
-          />
-        ))}
-      </div>
+    <div className="row">
+      {data?.map((product) => (
+        <ProductCard
+          key={product.id}
+          product={product}
+          isFavorite={favorites.some((fav) => fav.id === product.id)}
+          onToggleFavorite={toggleFavorite}
+        />
+      ))}
     </div>
   );
 };
